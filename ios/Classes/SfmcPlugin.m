@@ -28,6 +28,7 @@
 #import "SfmcPlugin.h"
 #import <SFMCSDK/SFMCSDK.h>
 #import <MarketingCloudSDK/MarketingCloudSDK.h>
+#import <PushFeatureSDK/PushFeatureSDK.h>
 #import "NSDictionary+SFMCEvent.h"
 #import "InboxUtility.h"
 
@@ -49,7 +50,7 @@ const int LOG_LENGTH = 800;
     [registrar addApplicationDelegate:instance];
     instance.channel = channel;
     //Add default tag.
-    [SFMCSdk requestPushSdk:^(id<PushInterface> _Nonnull mp) {
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> _Nonnull mp) {
         (void)[mp addTag:@"Flutter"];
     }];
 
@@ -167,9 +168,8 @@ const int LOG_LENGTH = 800;
 }
 
 - (void)getSystemTokenWithResult:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
-        NSString* deviceToken = [mp deviceToken];
-        result(deviceToken);
+    [SFPushFeature requestSdk:^(id<SFPushFeatureApi> pushFeature) {
+        result([pushFeature deviceToken]);
     }];
 }
 
@@ -184,84 +184,84 @@ const int LOG_LENGTH = 800;
 }
 
 - (void)enablePushWithResult:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
-        [mp setPushEnabled:YES];
+    [SFPushFeature requestSdk:^(id<SFPushFeatureApi> pushFeature) {
+        [pushFeature setPushEnabledWithPushEnabled:YES];
         result(nil);
     }];
 }
 
 - (void)disablePushWithResult:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
-        [mp setPushEnabled:NO];
+    [SFPushFeature requestSdk:^(id<SFPushFeatureApi> pushFeature) {
+        [pushFeature setPushEnabledWithPushEnabled:NO];
         result(nil);
     }];
 }
 
 - (void)isPushEnabledWithResult:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
-        BOOL status = [mp pushEnabled];
-        result(@(status));
+    [SFPushFeature requestSdk:^(id<SFPushFeatureApi> pushFeature) {
+        result(@([pushFeature isPushEnabled]));
     }];
 }
 
 - (void)getDeviceIdWithResult:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
-        NSString* deviceId =  [mp deviceIdentifier];
-        result(deviceId);
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
+        result([mp deviceIdentifier]);
     }];
 }
 
 - (void)setContactKey:(NSString* _Nonnull)contactKey result:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
-        [[SFMCSdk identity] setProfileId:contactKey];
-        result(nil);
+    [[SFMCSdk identity] editWithIdentity:^id<SFIdentityModifier>(id<SFIdentityModifier> modifier) {
+        modifier.profileId = contactKey;
+        return modifier;
     }];
+    result(nil);
 }
 
 - (void)getContactKeyWithResult:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
-        NSString* contactKey = [mp contactKey];
-        result(contactKey);
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
+        result([mp contactKey]);
     }];
 }
 
 - (void)addTag:(NSString* _Nonnull)tag result:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
-        BOOL ignore = [mp addTag:tag];
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
+        (void)[mp addTag:tag];
         result(nil);
     }];
 }
 
 - (void)removeTag:(NSString* _Nonnull)tag result:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
-        BOOL ignore = [mp removeTag:tag];
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
+        (void)[mp removeTag:tag];
         result(nil);
     }];
 }
 
 - (void)getTagsWithResult:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
-        NSArray* tags = [[mp tags] allObjects];
-        result((tags != nil) ? tags : @[]);
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
+        NSSet* tags = [mp tags];
+        result((tags != nil) ? [tags allObjects] : @[]);
     }];
 }
 
 - (void)setAttributeWithKey:(NSString* _Nonnull)key value:(NSString* _Nonnull)value result:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
-        [[SFMCSdk identity] setProfileAttributes:@{key: value}];
-        result(nil);
+    [[SFMCSdk identity] editWithIdentity:^id<SFIdentityModifier>(id<SFIdentityModifier> modifier) {
+        [modifier addAttributeWithKey:key value:value];
+        return modifier;
     }];
+    result(nil);
 }
 
 - (void)clearAttributeWithKey:(NSString* _Nonnull)key result:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
-        [[SFMCSdk identity] clearProfileAttributeWithKey:key];
-        result(nil);
+    [[SFMCSdk identity] editWithIdentity:^id<SFIdentityModifier>(id<SFIdentityModifier> modifier) {
+        [modifier clearAttributeWithKey:key];
+        return modifier;
     }];
+    result(nil);
 }
 
 - (void)getAttributesWithResult:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
         NSDictionary* attributes = [mp attributes];
         result((attributes != nil) ? attributes : @{});
     }];
@@ -273,35 +273,33 @@ const int LOG_LENGTH = 800;
 }
 
 - (void)setAnalyticsEnabled:(BOOL)enabled result:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
         [mp setAnalyticsEnabled:enabled];
         result(nil);
     }];
 }
 
 - (void)isAnalyticsEnabledWithResult:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
-        BOOL isEnabled = [mp isAnalyticsEnabled];
-        result(@(isEnabled));
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
+        result(@([mp isAnalyticsEnabled]));
     }];
 }
 
 - (void)setPiAnalyticsEnabled:(BOOL)enabled result:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
         [mp setPiAnalyticsEnabled:enabled];
         result(nil);
     }];
 }
 
 - (void)isPiAnalyticsEnabledWithResult:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
-        BOOL isEnabled = [mp isPiAnalyticsEnabled];
-        result(@(isEnabled));
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
+        result(@([mp isPiAnalyticsEnabled]));
     }];
 }
 
 - (void)getMessagesWithResult:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
         NSArray<NSDictionary *> *inboxMessages = [mp getAllMessages];
         if ([inboxMessages count] == 0) {
                     result(@[]);
@@ -321,7 +319,7 @@ const int LOG_LENGTH = 800;
 }
 
 - (void)getReadMessagesWithResult:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
         NSArray<NSDictionary *> *inboxMessages = [mp getReadMessages];
         if ([inboxMessages count] == 0) {
                     result(@[]);
@@ -341,7 +339,7 @@ const int LOG_LENGTH = 800;
 }
 
 - (void)getUnreadMessagesWithResult:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
         NSArray<NSDictionary *> *inboxMessages = [mp getUnreadMessages];
         if ([inboxMessages count] == 0) {
                     result(@[]);
@@ -361,7 +359,7 @@ const int LOG_LENGTH = 800;
 }
 
 - (void)getDeletedMessagesWithResult:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
         NSArray<NSDictionary *> *inboxMessages = [mp getDeletedMessages];
         if ([inboxMessages count] == 0) {
                     result(@[]);
@@ -381,56 +379,56 @@ const int LOG_LENGTH = 800;
 }
 
 - (void)setMessageRead:(NSString * _Nonnull)messageId result:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
         BOOL success = [mp markMessageWithIdReadWithMessageId:messageId];
         result(@(success));
     }];
 }
 
 - (void)deleteMessage:(NSString * _Nonnull)messageId result:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
         BOOL success = [mp markMessageWithIdDeletedWithMessageId:messageId];
         result(@(success));
     }];
 }
 
 - (void)getMessagesCountWithResult:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
         NSUInteger count = [mp getAllMessagesCount];
         result(@(count));
     }];
 }
 
 - (void)getReadMessagesCountWithResult:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
         NSUInteger count = [mp getReadMessagesCount];
         result(@(count));
     }];
 }
 
 - (void)getUnreadMessagesCountWithResult:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
         NSUInteger count = [mp getUnreadMessagesCount];
         result(@(count));
     }];
 }
 
 - (void)getDeletedMessagesCountWithResult:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
         NSUInteger count = [mp getDeletedMessagesCount];
         result(@(count));
     }];
 }
 
 - (void)setAllMessageRead:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
         BOOL success = [mp markAllMessagesRead];
         result(@(success));
     }];
 }
 
 - (void)deleteAllMessages:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
         BOOL success = [mp markAllMessagesDeleted];
         result(@(success));
     }];
@@ -468,7 +466,7 @@ const int LOG_LENGTH = 800;
 }
 
 - (void)refreshInbox:(FlutterResult)result {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> mp) {
+    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
         BOOL success = [mp refreshMessages];
         if (success) {
             [[NSNotificationCenter defaultCenter] addObserver:self

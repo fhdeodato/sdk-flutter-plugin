@@ -28,61 +28,74 @@
 #import "AppDelegate.h"
 #import "GeneratedPluginRegistrant.h"
 #import <MarketingCloudSDK/MarketingCloudSDK.h>
+#import <PushFeatureSDK/PushFeatureSDK.h>
 
 @implementation AppDelegate
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     [GeneratedPluginRegistrant registerWithRegistry:self];
-    // Override point for customization after application launch.
-    // Configure the SFMC sdk ...
-    PushConfigBuilder *pushConfigBuilder = [[PushConfigBuilder alloc] initWithAppId:@"{MC_APP_ID}"];
-    [pushConfigBuilder setAccessToken:@"{MC_ACCESS_TOKEN}"];
-    [pushConfigBuilder setMarketingCloudServerUrl:[NSURL URLWithString:@"{MC_APP_SERVER_URL}"]];
-    [pushConfigBuilder setMid:@"MC_MID"];
-    [pushConfigBuilder setAnalyticsEnabled:YES];
-    [pushConfigBuilder setInboxEnabled:YES];
-    [SFMCSdk initializeSdk:[[[SFMCSdkConfigBuilder new] setPushWithConfig:[pushConfigBuilder build] onCompletion:^(SFMCSdkOperationResult result) {
-        if (result == SFMCSdkOperationResultSuccess) {
-            [self pushSetup];
-        } else {
-            NSLog(@"SFMC sdk configuration failed.");
-        }
-    }] build]];
-    
+    [self configureSdk];
     return [super application:application didFinishLaunchingWithOptions:launchOptions];
 }
 
-- (void)pushSetup {
-    // AppDelegate adheres to the SFMCSdkURLHandlingDelegate protocol
-    // and handles URLs passed back from the SDK in `sfmc_handleURL`.
-    // For more information, see https://salesforce-marketingcloud.github.io/MarketingCloudSDK-iOS/sdk-implementation/implementation-urlhandling.html
-    [SFMCSdk requestPushSdk:^(id<PushInterface> _Nonnull mp) {
-        [mp setURLHandlingDelegate:self];
+- (void)configureSdk {
+    SFMarketingCloudSdkConfigBuilder *engagementConfigBuilder =
+        [[SFMarketingCloudSdkConfigBuilder alloc] initWithAppId:@"{MC_APP_ID}"];
+    [engagementConfigBuilder setAccessToken:@"{MC_ACCESS_TOKEN}"];
+    [engagementConfigBuilder setMarketingCloudServerUrl:[NSURL URLWithString:@"{MC_APP_SERVER_URL}"]];
+    [engagementConfigBuilder setMid:@"MC_MID"];
+    [engagementConfigBuilder setAnalyticsEnabled:YES];
+    [engagementConfigBuilder setInboxEnabled:YES];
+
+    SFPushFeatureConfigBuilder *pushFeatureConfigBuilder = [[SFPushFeatureConfigBuilder alloc] init];
+    SFPushFeatureConfig *pushFeatureConfig =
+        [[pushFeatureConfigBuilder setApplicationControlsBadging:YES] build];
+
+    SFMCSdkConfig *configuration = [[[[SFMCSdkConfigBuilder new]
+        setEngagementWithConfig:[engagementConfigBuilder build]]
+        setPushFeatureWithConfig:pushFeatureConfig] build];
+
+    [SFMCSdk initializeSdk:configuration completion:^(NSArray<SFMCModuleInitStatus *> *status) {
+        BOOL allSuccessful = YES;
+        for (SFMCModuleInitStatus *moduleStatus in status) {
+            if (moduleStatus.initStatus != SFMCSdkOperationResultSuccess) {
+                allSuccessful = NO;
+            }
+        }
+        if (allSuccessful) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self pushSetup];
+            });
+        } else {
+            NSLog(@"SFMC sdk configuration failed.");
+        }
     }];
-    
+}
+
+- (void)pushSetup {
+    [SFPushFeature requestSdk:^(id<SFPushFeatureApi> pushFeature) {
+        [pushFeature setURLHandlingDelegate:self];
+    }];
+
     dispatch_async(dispatch_get_main_queue(), ^{
-        // set the UNUserNotificationCenter delegate - the delegate must be set here in
-        // didFinishLaunchingWithOptions
         [UNUserNotificationCenter currentNotificationCenter].delegate = self;
         [[UIApplication sharedApplication] registerForRemoteNotifications];
-        
+
         [[UNUserNotificationCenter currentNotificationCenter]
          requestAuthorizationWithOptions:UNAuthorizationOptionAlert |
          UNAuthorizationOptionSound |
          UNAuthorizationOptionBadge
          completionHandler:^(BOOL granted, NSError *_Nullable error) {
-            if (error == nil) {
-                if (granted == YES) {
-                    NSLog(@"User granted permission");
-                }
+            if (error == nil && granted == YES) {
+                NSLog(@"User granted permission");
             }
         }];
     });
 }
 
 - (void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> _Nonnull mp) {
-        [mp setDeviceToken:deviceToken];
+    [SFPushFeature requestSdk:^(id<SFPushFeatureApi> pushFeature) {
+        [pushFeature setDeviceToken:deviceToken];
     }];
 }
 
@@ -90,13 +103,9 @@
     os_log_debug(OS_LOG_DEFAULT, "didFailToRegisterForRemoteNotificationsWithError = %@", error);
 }
 
-// The method will be called on the delegate when the user responded to the notification by opening
-// the application, dismissing the notification or choosing a UNNotificationAction. The delegate
-// must be set before the application returns from applicationDidFinishLaunching:.
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center didReceiveNotificationResponse:(UNNotificationResponse *)response withCompletionHandler:(void (^)(void))completionHandler {
-    // tell the MarketingCloudSDK about the notification
-    [SFMCSdk requestPushSdk:^(id<PushInterface> _Nonnull mp) {
-        [mp setNotificationResponse:response];
+    [SFPushFeature requestSdk:^(id<SFPushFeatureApi> pushFeature) {
+        [pushFeature setNotificationResponse:response];
     }];
     if (completionHandler != nil) {
         completionHandler();
@@ -108,8 +117,8 @@
 }
 
 - (void)application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)userInfo fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
-    [SFMCSdk requestPushSdk:^(id<PushInterface> _Nonnull mp) {
-        [mp setNotificationUserInfo:userInfo];
+    [SFPushFeature requestSdk:^(id<SFPushFeatureApi> pushFeature) {
+        [pushFeature setNotificationUserInfo:userInfo];
     }];
     completionHandler(UIBackgroundFetchResultNewData);
 }
