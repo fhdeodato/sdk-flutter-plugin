@@ -105,8 +105,15 @@ const int LOG_LENGTH = 800;
         NSDictionary *args = call.arguments;
         NSString *key = args[@"key"];
         NSString *value = args[@"value"];
+
+        if (key == nil || value == nil) {
+            result([FlutterError errorWithCode:@"INVALID_ARGUMENT"
+                                    message:@"key and value are required"
+                                    details:nil]);
+            return;
+        }
+
         [self setAttributeWithKey:key value:value result:result];
-        result(nil);
     } else if ([@"clearAttribute" isEqualToString:call.method]) {
         NSString *key = call.arguments[@"key"];
         [self clearAttributeWithKey:key result:result];
@@ -155,8 +162,10 @@ const int LOG_LENGTH = 800;
         [self refreshInbox:result];
     } else if ([@"registerInboxResponseListener" isEqualToString:call.method]) {
         [self registerListeners];
+        result(nil);
     } else if ([@"unregisterInboxResponseListener" isEqualToString:call.method]) {
         [self unregisterListeners];
+        result(nil);
     } else {
         result(FlutterMethodNotImplemented);
     }
@@ -459,23 +468,39 @@ const int LOG_LENGTH = 800;
 }
 
 - (void)onInboxRefresh:(NSNotification *)notification {
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:@"SFMCInboxMessagesRefreshCompleteNotification"
+                                                  object:nil];
+
     if (self.refreshResult != nil) {
-        self.refreshResult(@(YES));
+        FlutterResult result = self.refreshResult;
         self.refreshResult = nil;
+        result(@(YES));
     }
 }
 
 - (void)refreshInbox:(FlutterResult)result {
+    if (self.refreshResult != nil) {
+        result([FlutterError errorWithCode:@"REFRESH_IN_PROGRESS"
+                                   message:@"Inbox refresh already in progress"
+                                   details:nil]);
+        return;
+    }
+
     [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> mp) {
         BOOL success = [mp refreshMessages];
+
         if (success) {
+            self.refreshResult = result;
+
+            [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                            name:@"SFMCInboxMessagesRefreshCompleteNotification"
+                                                          object:nil];
+
             [[NSNotificationCenter defaultCenter] addObserver:self
-                                                     selector:@selector(
-                                                             onInboxRefresh:)
+                                                     selector:@selector(onInboxRefresh:)
                                                          name:@"SFMCInboxMessagesRefreshCompleteNotification"
                                                        object:nil];
-            NSLog(@"Inbox refresh completed successfully.");
-            self.refreshResult = result;
         } else {
             result(@(NO));
         }
@@ -502,6 +527,10 @@ const int LOG_LENGTH = 800;
 - (BOOL)application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)userInfo fetchCompletionHandler:(void (^)(UIBackgroundFetchResult result))completionHandler {
     completionHandler(UIBackgroundFetchResultNoData);
     return YES;
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 @end

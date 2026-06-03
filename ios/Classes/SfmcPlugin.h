@@ -29,5 +29,7 @@
 #import <os/log.h>
 
 @interface SfmcPlugin : NSObject<FlutterPlugin, FlutterApplicationLifeCycleDelegate>
+
 @property(nonatomic, strong) os_log_t logger;
+
 @end
