@@ -3,7 +3,7 @@ version '1.0-SNAPSHOT'
 
 buildscript {
     ext.kotlin_version = '1.9.22'
-    ext.marketingcloud_sdk_version = '9.0.+'
+    ext.marketingcloud_sdk_version = '11.0.+'
     ext.compile_sdk_version = 36
     ext.min_sdk_version = 24
     repositories {

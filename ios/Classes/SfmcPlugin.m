@@ -49,11 +49,12 @@ const int LOG_LENGTH = 800;
     [registrar addMethodCallDelegate:instance channel:channel];
     [registrar addApplicationDelegate:instance];
     instance.channel = channel;
-    //Add default tag.
-    [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> _Nonnull mp) {
-        (void)[mp addTag:@"Flutter"];
-    }];
-
+    // Defer default tag until the engagement module is configured in AppDelegate.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [SFMarketingCloudSdk requestSdk:^(id<MarketingCloudSdkInterface> _Nonnull mp) {
+            (void)[mp addTag:@"Flutter"];
+        }];
+    });
 }
 
 - (void)log:(NSString *)msg {
@@ -522,11 +523,25 @@ const int LOG_LENGTH = 800;
 }
 
 // https://github.com/flutter/flutter/issues/52895
-// Flutter overrides `respondToSelector` and does shady things. There is issue in flutter where `didReceiveRemoteNotification`
-// not getting called on AppDelegate. This is workaround to make sure AppDeleage `didReceiveRemoteNotification` gets called.
+// Flutter só encaminha este selector se um plugin implementar. Processamos aqui e
+// retornamos NO para o AppDelegate também receber (logs + analytics duplicados ok).
 - (BOOL)application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)userInfo fetchCompletionHandler:(void (^)(UIBackgroundFetchResult result))completionHandler {
-    completionHandler(UIBackgroundFetchResultNoData);
-    return YES;
+    [self log:[NSString stringWithFormat:@"[PUSH-MC] plugin didReceiveRemoteNotification: %@", userInfo]];
+    [SFPushFeature requestSdk:^(id<SFPushFeatureApi> pushFeature) {
+        [pushFeature setNotificationUserInfo:userInfo];
+    }];
+    completionHandler(UIBackgroundFetchResultNewData);
+    return NO;
+}
+
+- (void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(NSData *)deviceToken {
+    [SFPushFeature requestSdk:^(id<SFPushFeatureApi> pushFeature) {
+        [pushFeature setDeviceToken:deviceToken];
+    }];
+}
+
+- (void)application:(UIApplication *)application didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
+    [self log:[NSString stringWithFormat:@"didFailToRegisterForRemoteNotificationsWithError: %@", error]];
 }
 
 - (void)dealloc {

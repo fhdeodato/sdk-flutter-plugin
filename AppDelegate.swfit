@@ -1,0 +1,260 @@
+import UIKit
+import Flutter
+import UserNotifications
+import SFMCSDK
+import MarketingCloudSDK
+import PushFeatureSDK
+
+@main
+@objc class AppDelegate: FlutterAppDelegate {
+
+ // custom push notifications handlers
+ let channelName : String = "PushNotificationChannel"
+ var deviceToken : String = ""
+ let propertyUrlSent: String = "flutter.push_notifications_url_sent"
+ let initFromPushNotification: String = "flutter.push_notifications_init"
+ // properties for push notifications
+ let pushTitle: String = "flutter.push_notifications_title"
+ let pushSubTitle: String = "flutter.push_notifications_subtitle"
+ let pushImage: String = "flutter.push_notifications_image"
+ let pushBody: String = "flutter.push_notifications_body"
+
+  // The appID, accessToken and appEndpoint are required values for MobilePush SDK Module configuration and are obtained from your MobilePush app.
+  // See https://developer.salesforce.com/docs/marketing/mobile-unified-sdk/guide/ios-sdk-integration.html for more information.
+  let appID = "ffd43749-cb48-4317-98f6-9eb9f755b2eb"
+  let accessToken = "NwnrEem0XL9zU6DbJIsyKFQh"
+  let appEndpointURL = "https://mcphxv826yp5gm9x58z2zmrlclv1.device.marketingcloudapis.com/"
+  let mid = "514007602"
+
+  // Define features of Marketing Cloud your app will use.
+  let analytics = true
+
+  override func application(
+    _ application: UIApplication,
+    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+  ) -> Bool {
+
+    // CUSTOM IMPLEMENTATION FOR PUSH NOTIFICATIONS
+    let controller : FlutterViewController = window?.rootViewController as! FlutterViewController
+    let pushNotificationChannel = FlutterMethodChannel(name: channelName, binaryMessenger: controller.binaryMessenger)
+
+    if #available(iOS 10.0, *) {
+        UNUserNotificationCenter.current().delegate = self
+    }
+
+    pushNotificationChannel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
+        switch call.method {
+        case "registerForPushNotifications":
+            self?.registerForPushNotifications(application: application, result: result)
+        case "retrieveDeviceToken":
+            self?.getDeviceToken(result: result)
+        default:
+            result(FlutterMethodNotImplemented)
+        }
+        }
+
+    GeneratedPluginRegistrant.register(with: self)
+
+    self.configureSDK()
+
+    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+    private func registerForPushNotifications(application: UIApplication, result: @escaping FlutterResult) {
+        application.registerForRemoteNotifications()
+        result("Device Token registration initiated")
+    }
+
+  // SDK: REQUIRED IMPLEMENTATION
+  func configureSDK() {
+      let appEndpoint = URL(string: appEndpointURL)!
+
+      let engagementConfiguration = MarketingCloudSdkConfigBuilder(appId: appID)
+          .setAccessToken(accessToken)
+          .setMarketingCloudServerUrl(appEndpoint)
+          .setMid(mid)
+          .setAnalyticsEnabled(analytics)
+          .build()
+
+      let pushFeatureConfiguration = PushFeatureConfigBuilder()
+          .setApplicationControlsBadging(true)
+          .build()
+
+      var configBuilder = ConfigBuilder()
+      configBuilder = configBuilder
+          .setEngagement(config: engagementConfiguration)
+          .setPushFeature(config: pushFeatureConfiguration)
+
+      let completionHandler: ([ModuleInitStatus]) -> Void = { [weak self] status in
+          DispatchQueue.main.async {
+              self?.handleSDKInitializationCompletion(status: status)
+          }
+      }
+
+      SFMCSdk.initializeSdk(configBuilder.build(), completion: completionHandler)
+  }
+
+  private func handleSDKInitializationCompletion(status: [ModuleInitStatus]) {
+      var allSuccessful = true
+
+      for moduleStatus in status {
+          if moduleStatus.initStatus != .success {
+              allSuccessful = false
+          }
+      }
+
+      if allSuccessful {
+          setupMobilePush()
+      } else {
+          print("SFMC sdk configuration failed.")
+      }
+  }
+
+  func setupMobilePush() {
+      PushFeature.requestSdk { pushFeature in
+          pushFeature?.setURLHandlingDelegate(self)
+      }
+
+      // Make sure to dispatch this to the main thread, as UNUserNotificationCenter will present UI.
+      DispatchQueue.main.async {
+        // Request authorization from the user for push notification alerts.
+        // we will only request access to the push notification in a future moment not in the init of the app
+
+        // In any case, your application should register for remote notifications *each time* your application
+        // launches to ensure that the push token used by MobilePush (for silent push) is updated if necessary.
+
+        // Registering in this manner does *not* mean that a user will see a notification - it only means
+        // that the application will receive a unique push token from iOS.
+        UIApplication.shared.registerForRemoteNotifications()
+      }
+  }
+
+  // PushFeature SDK: REQUIRED IMPLEMENTATION
+  override func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+      PushFeature.requestSdk { pushFeature in
+          pushFeature?.setDeviceToken(deviceToken)
+      }
+
+    let tokenParts = deviceToken.map { data in String(format: "%02.2hhx", data) }
+    let token = tokenParts.joined()
+    self.deviceToken = token
+  }
+
+  // PushFeature SDK: REQUIRED IMPLEMENTATION
+  override func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+      print(error)
+  }
+
+  // PushFeature SDK: REQUIRED IMPLEMENTATION
+  /** This delegate method offers an opportunity for applications with the "remote-notification" background mode to fetch appropriate new data in response to an incoming remote notification. You should call the fetchCompletionHandler as soon as you're finished performing that operation, so the system can accurately estimate its power and data cost.
+    This method will be invoked even if the application was launched or resumed because of the remote notification. The respective delegate methods will be invoked first. Note that this behavior is in contrast to application:didReceiveRemoteNotification:, which is not called in those cases, and which will not be invoked if this method is implemented. **/
+  override func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable : Any], fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+      PushFeature.requestSdk { pushFeature in
+          pushFeature?.setNotificationUserInfo(userInfo)
+      }
+      completionHandler(.newData)
+  }
+
+  // to remove the badge everytime the app is opened
+  override func applicationDidBecomeActive(_ application: UIApplication) {
+      application.applicationIconBadgeNumber = 0;
+  }
+
+    override func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        let userInfo = notification.request.content.userInfo
+        PushFeature.requestSdk { pushFeature in
+            pushFeature?.setNotificationUserInfo(userInfo)
+        }
+
+        if #available(iOS 14.0, *) {
+            completionHandler([.banner, .list, .sound, .badge])
+        } else {
+            completionHandler([.alert, .sound, .badge])
+        }
+    }
+
+    // The method will be called on the delegate when the user responded to the notification by opening the application, dismissing the notification or choosing a UNNotificationAction. The delegate must be set before the application returns from applicationDidFinishLaunching:.
+    override func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+
+        // ok, the app should know that it is going to be init from a push call
+        UserDefaults.standard.set(true, forKey: initFromPushNotification)
+
+        // save the url to use in the init
+        let userInfo = response.notification.request.content.userInfo
+        // get the push notification data
+        // Acessar "aps" como um dicionário de [String: Any]
+        if let aps = userInfo["aps"] as? [String: Any],
+        let alert = aps["alert"] as? [String: Any] {
+            let title = alert["title"] as? String ?? ""
+            let subtitle = alert["subtitle"] as? String ?? ""
+            let body = alert["body"] as? String ?? ""
+            let image = alert["launch-image"] as? String ?? ""
+
+            let url = userInfo["_od"] as? String ?? ""
+
+            // update the storage
+            UserDefaults.standard.set(title, forKey: pushTitle)
+            UserDefaults.standard.set(subtitle, forKey: pushSubTitle)
+            UserDefaults.standard.set(body, forKey: pushBody)
+            UserDefaults.standard.set(image, forKey: pushImage)
+            UserDefaults.standard.set(url, forKey: propertyUrlSent)
+        }
+
+
+        // Required: tell the Push Feature SDK about the notification. This will collect MobilePush analytics
+        // and process the notification on behalf of your application.
+        PushFeature.requestSdk { pushFeature in
+            pushFeature?.setNotificationResponse(response)
+        }
+
+        completionHandler()
+    }
+
+
+    // custom funtions for push notifications
+    private func getDeviceToken(result: @escaping FlutterResult) {
+        if(deviceToken.isEmpty){
+            result(FlutterError(code: "UNAVAILABLE", message: "Device token not available", details: nil))
+        } else{
+            result(deviceToken)
+        }
+    }
+
+    private func handleNotification(userInfo: [AnyHashable: Any], isBackground: Bool ) {
+        let controller: FlutterViewController = window?.rootViewController as! FlutterViewController
+        let pushNotificationChannel = FlutterMethodChannel(name: channelName,binaryMessenger: controller.binaryMessenger)
+        print("handleNotification");
+
+        // get the push notification data
+        let title = userInfo["title"] as? String ?? ""
+        let subtitle = userInfo["subtitle"] as? String ?? ""
+        let body = userInfo["body"] as? String ?? ""
+        let image = userInfo["launch-image"] as? String ?? ""
+        let url = userInfo["_od"] as? String ?? ""
+
+        // Create a dictionary with custom data and isBackground status
+        let arguments: [String: Any] = [
+            "url": url,
+            "title": title,
+            "subtitle": subtitle,
+            "body": body,
+            "image": image,
+            "isBackground": isBackground
+        ]
+        pushNotificationChannel.invokeMethod("onPushNotification", arguments: arguments)
+    }
+}
+
+extension AppDelegate: URLHandlingDelegate {
+    func sfmc_handleURL(_ url: URL, type: String) {
+        if UIApplication.shared.canOpenURL(url) {
+            UIApplication.shared.open(url, options: [:]) { success in
+                if success {
+                    print("url \(url) opened successfully")
+                } else {
+                    print("url \(url) could not be opened")
+                }
+            }
+        }
+    }
+}
